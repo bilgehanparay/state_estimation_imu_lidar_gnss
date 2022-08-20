@@ -143,11 +143,13 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
     M2 = np.matmul(np.matmul(h_jac, p_cov_check), h_jac.T) + sensor_var
     K = np.matmul(M1, np.linalg.inv(M2))
     # 3.2 Compute error state
-
+    exk = np.matmul(K, y_k - p_check)
     # 3.3 Correct predicted state
+    p_hat = p_check + exk[0:3]
+    v_hat = v_check + exk[3:6]
 
     # 3.4 Compute corrected covariance
-
+    p_cov_hat = np.matmul(np.eye(9) - np.matmul(K, h_jac), p_cov_check)
     return p_hat, v_hat, q_hat, p_cov_hat
 
 #### 5. Main Filter Loop #######################################################################
