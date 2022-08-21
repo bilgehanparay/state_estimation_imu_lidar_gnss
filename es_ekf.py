@@ -150,7 +150,7 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
     p_hat = p_check + ex_k[0:3]
     v_hat = v_check + ex_k[3:6]
     ephi_k = ex_k[6:]
-    q_ephi_k = Quaternion(axis_angle=ephi_k)
+    q_ephi_k = Quaternion(axis_angle=angle_normalize(ephi_k))
     q_hat = q_ephi_k.quat_mult_right(q_check)
     # 3.4 Compute corrected covariance
     p_cov_hat = np.matmul(np.eye(9) - np.matmul(K, h_jac), p_cov_check)
