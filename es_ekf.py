@@ -127,8 +127,8 @@ p_est[0] = gt.p[0]
 v_est[0] = gt.v[0]
 q_est[0] = Quaternion(euler=gt.r[0]).to_numpy()
 p_cov[0] = np.zeros(9)  # covariance of estimate
-gnss_i = 0
-lidar_i = 0
+gnss_i = 1
+lidar_i = 1
 
 
 #### 4. Measurement Update #####################################################################
@@ -165,12 +165,12 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
 for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial prediction from gt
     delta_t = imu_f.t[k] - imu_f.t[k - 1]
     Qk_1 = np.zeros((6, 6))
-    Qk_1[0:3, 0:3] = var_imu_f*np.eye(3)
+    Qk_1[0:3, 0:3] = delta_t*delta_t*var_imu_f*np.eye(3)
     Qk_1[0:3, 3:6] = 0 * np.eye(3)
     Qk_1[3:6, 0:3] = 0 * np.eye(3)
-    Qk_1[3:6, 3:6] = var_imu_w*np.eye(3)
+    Qk_1[3:6, 3:6] = delta_t*delta_t*var_imu_w*np.eye(3)
     # 1. Update state with IMU inputs
-    # 1.1 compute orientation
+    # 1.1 compute rotation
     qw = q_est[k-1][0]
     qv = np.matrix([q_est[k-1][1], q_est[k-1][2], q_est[k-1][3]]).T
     param1 = qw*qw - np.matmul(qv.T, qv)
@@ -183,15 +183,14 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     # 1.1 Linearize the motion model and compute Jacobians
     F_jac = np.zeros((9, 9))
     F_jac[0:3, 0:3] = np.eye(3)
-    F_jac[3:6, 0:3] = delta_t*np.eye(3)
-    F_jac[6:9, 0:3] = 0 * np.eye(3)
-    F_jac[0:3, 3:6] = 0 * np.eye(3)
-    F_jac[3:6, 3:6] = 1 * np.eye(3)
-    F_jac[6:9, 3:6] = -1 * delta_t*skew_symmetric(np.matmul(C_ns, imu_f.data[k-1].T).T)
+    F_jac[0:3, 3:6] = delta_t*np.eye(3)
     F_jac[0:3, 6:9] = 0 * np.eye(3)
-    F_jac[3:6, 6:9] = 0 * np.eye(3)
+    F_jac[3:6, 0:3] = 0 * np.eye(3)
+    F_jac[3:6, 3:6] = 1 * np.eye(3)
+    F_jac[3:6, 6:9] = -1 * delta_t*skew_symmetric(np.matmul(C_ns, imu_f.data[k-1].T).T)
+    F_jac[6:9, 0:3] = 0 * np.eye(3)
+    F_jac[6:9, 3:6] = 0 * np.eye(3)
     F_jac[6:9, 6:9] = np.eye(3)
-    F_jac = F_jac.T
     # 2. Propagate uncertainty
     p_cov_check = np.matmul(np.matmul(F_jac, p_cov[k-1]), F_jac.T) + np.matmul(np.matmul(l_jac, Qk_1), l_jac.T)
     # 3. Check availability of GNSS and LIDAR measurements
@@ -200,22 +199,25 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     tgnss = gnss.t[gnss_i]
     # check if lidar measurement is available and update measurement with available measurement
     if tk == tl:
-        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_LIDAR, p_cov[k], lidar.data[k], p_est[k], v_est[k], q_est[k])
+        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_LIDAR, p_cov[k], lidar.data[lidar_i], p_est[k], v_est[k], q_est[k])
         lidar_i += 1
+        if lidar_i > 520:
+            lidar_i = 520
         # Update states (save)
         p_est[k] = p_hat
         v_est[k] = v_hat
         q_est[k] = q_hat
         p_cov[k] = p_cov_hat
     if tk == tgnss:
-        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_GNSS, p_cov[k], lidar.data[k], p_est[k], v_est[k], q_est[k])
+        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_GNSS, p_cov[k], gnss.data[gnss_i], p_est[k], v_est[k], q_est[k])
         gnss_i += 1
+        if gnss_i > 54:
+            gnss_i = 54
         # Update states (save)
         p_est[k] = p_hat
         v_est[k] = v_hat
         q_est[k] = q_hat
         p_cov[k] = p_cov_hat
-
 #### 6. Results and Analysis ###################################################################
 
 ################################################################################################
