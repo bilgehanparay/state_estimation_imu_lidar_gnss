@@ -150,7 +150,7 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
     p_hat = p_check + ex_k[0:3]
     v_hat = v_check + ex_k[3:6]
     ephi_k = ex_k[6:]
-    q_ephi_k = Quaternion(axis_angle=angle_normalize(ephi_k))
+    q_ephi_k = Quaternion(euler=angle_normalize(ephi_k))
     q_hat = q_ephi_k.quat_mult_right(q_check)
     # 3.4 Compute corrected covariance
     p_cov_hat = np.matmul(np.eye(9) - np.matmul(K, h_jac), p_cov_check)
@@ -164,9 +164,17 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
 ################################################################################################
 for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial prediction from gt
     delta_t = imu_f.t[k] - imu_f.t[k - 1]
-
     # 1. Update state with IMU inputs
-
+    # 1.1 compute orientation
+    qw = q_est[k-1][0]
+    qv = np.matrix([q_est[k-1][1], q_est[k-1][2], q_est[k-1][3]]).T
+    param1 = qw*qw - np.matmul(qv.T, qv)
+    C_ns = param1.item()*np.eye(3) + 2*np.matmul(qv, qv.T) + 2*qw*skew_symmetric(qv)
+    # 1.2 update state estimates
+    p_est[k] = p_est[k-1] + delta_t*v_est[k-1] + 0.5*delta_t*delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
+    v_est[k] = v_est[k-1] + delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
+    qw_k_1 = Quaternion(delta_t*imu_w.data[k-1])
+    q_est[k] = qw_k_1.quat_mult_left(q_est[k-1])
     # 1.1 Linearize the motion model and compute Jacobians
 
     # 2. Propagate uncertainty
