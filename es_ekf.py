@@ -178,7 +178,7 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     # 1.2 update state estimates
     p_est[k] = p_est[k-1] + delta_t*v_est[k-1] + 0.5*delta_t*delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
     v_est[k] = v_est[k-1] + delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
-    qw_k_1 = Quaternion(euler=delta_t*imu_w.data[k-1])
+    qw_k_1 = Quaternion(euler=angle_normalize(delta_t*imu_w.data[k-1]))
     q_est[k] = qw_k_1.quat_mult_left(q_est[k-1])
     # 1.1 Linearize the motion model and compute Jacobians
     F_jac = np.zeros((9, 9))
