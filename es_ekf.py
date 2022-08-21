@@ -164,6 +164,11 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
 ################################################################################################
 for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial prediction from gt
     delta_t = imu_f.t[k] - imu_f.t[k - 1]
+    Qk_1 = np.zeros((6, 6))
+    Qk_1[0:3, 0:3] = var_imu_f*np.eye(3)
+    Qk_1[0:3, 3:6] = 0 * np.eye(3)
+    Qk_1[3:6, 0:3] = 0 * np.eye(3)
+    Qk_1[3:6, 3:6] = var_imu_w*np.eye(3)
     # 1. Update state with IMU inputs
     # 1.1 compute orientation
     qw = q_est[k-1][0]
@@ -173,16 +178,43 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     # 1.2 update state estimates
     p_est[k] = p_est[k-1] + delta_t*v_est[k-1] + 0.5*delta_t*delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
     v_est[k] = v_est[k-1] + delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
-    qw_k_1 = Quaternion(delta_t*imu_w.data[k-1])
+    qw_k_1 = Quaternion(euler=delta_t*imu_w.data[k-1])
     q_est[k] = qw_k_1.quat_mult_left(q_est[k-1])
     # 1.1 Linearize the motion model and compute Jacobians
-
+    F_jac = np.zeros((9, 9))
+    F_jac[0:3, 0:3] = np.eye(3)
+    F_jac[3:6, 0:3] = delta_t*np.eye(3)
+    F_jac[6:9, 0:3] = 0 * np.eye(3)
+    F_jac[0:3, 3:6] = 0 * np.eye(3)
+    F_jac[3:6, 3:6] = 1 * np.eye(3)
+    F_jac[6:9, 3:6] = -1 * delta_t*skew_symmetric(np.matmul(C_ns, imu_f.data[k-1].T).T)
+    F_jac[0:3, 6:9] = 0 * np.eye(3)
+    F_jac[3:6, 6:9] = 0 * np.eye(3)
+    F_jac[6:9, 6:9] = np.eye(3)
+    F_jac = F_jac.T
     # 2. Propagate uncertainty
-
+    p_cov_check = np.matmul(np.matmul(F_jac, p_cov[k-1]), F_jac.T) + np.matmul(np.matmul(l_jac, Qk_1), l_jac.T)
     # 3. Check availability of GNSS and LIDAR measurements
-
-    # measurement_update(R_GNSS, p_cov[k], lidar.data[k], p_est[k], v_est[k], q_est[0])
-    # Update states (save)
+    tk = imu_f.t[k]
+    tl = lidar.t[lidar_i]
+    tgnss = gnss.t[gnss_i]
+    # check if lidar measurement is available and update measurement with available measurement
+    if tk == tl:
+        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_LIDAR, p_cov[k], lidar.data[k], p_est[k], v_est[k], q_est[k])
+        lidar_i += 1
+        # Update states (save)
+        p_est[k] = p_hat
+        v_est[k] = v_hat
+        q_est[k] = q_hat
+        p_cov[k] = p_cov_hat
+    if tk == tgnss:
+        p_hat, v_hat, q_hat, p_cov_hat = measurement_update(R_GNSS, p_cov[k], lidar.data[k], p_est[k], v_est[k], q_est[k])
+        gnss_i += 1
+        # Update states (save)
+        p_est[k] = p_hat
+        v_est[k] = v_hat
+        q_est[k] = q_hat
+        p_cov[k] = p_cov_hat
 
 #### 6. Results and Analysis ###################################################################
 
