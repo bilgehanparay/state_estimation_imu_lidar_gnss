@@ -138,20 +138,18 @@ lidar_i = 1
 # a function for it.
 ################################################################################################
 def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
-    K = np.zeros((9, 3))
     # 3.1 Compute Kalman Gain
     M1 = np.matmul(p_cov_check, h_jac.T)
     M2 = np.matmul(np.matmul(h_jac, p_cov_check), h_jac.T) + sensor_var
     K = np.matmul(M1, np.linalg.inv(M2))
     # 3.2 Compute error state
     ex_k = np.matmul(K, y_k - p_check)
-
     # 3.3 Correct predicted state
     p_hat = p_check + ex_k[0:3]
     v_hat = v_check + ex_k[3:6]
     ephi_k = ex_k[6:]
-    q_ephi_k = Quaternion(euler=angle_normalize(ephi_k))
-    q_hat = q_ephi_k.quat_mult_right(q_check)
+    q_ephi_k = Quaternion(axis_angle=angle_normalize(ephi_k))
+    q_hat = q_ephi_k.quat_mult_left(q_check)
     # 3.4 Compute corrected covariance
     p_cov_hat = np.matmul(np.eye(9) - np.matmul(K, h_jac), p_cov_check)
     return p_hat, v_hat, q_hat, p_cov_hat
@@ -171,15 +169,16 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     Qk_1[3:6, 3:6] = delta_t*delta_t*var_imu_w*np.eye(3)
     # 1. Update state with IMU inputs
     # 1.1 compute rotation
-    qw = q_est[k-1][0]
-    qv = np.matrix([q_est[k-1][1], q_est[k-1][2], q_est[k-1][3]]).T
-    param1 = qw*qw - np.matmul(qv.T, qv)
-    C_ns = param1.item()*np.eye(3) + 2*np.matmul(qv, qv.T) + 2*qw*skew_symmetric(qv)
+    # qw = q_est[k-1][0]
+    # qv = np.matrix([q_est[k-1][1], q_est[k-1][2], q_est[k-1][3]]).T
+    # param1 = qw*qw - np.matmul(qv.T, qv)
+    # C_ns_1 = param1.item()*np.eye(3) + 2*np.matmul(qv, qv.T) + 2*qw*skew_symmetric(qv)
+    C_ns = Quaternion(*q_est[k-1]).to_mat()
     # 1.2 update state estimates
     p_est[k] = p_est[k-1] + delta_t*v_est[k-1] + 0.5*delta_t*delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
     v_est[k] = v_est[k-1] + delta_t*(np.matmul(C_ns, imu_f.data[k-1].T) + g)
     qw_k_1 = Quaternion(euler=angle_normalize(delta_t*imu_w.data[k-1]))
-    q_est[k] = qw_k_1.quat_mult_left(q_est[k-1])
+    q_est[k] = qw_k_1.quat_mult_right(q_est[k-1])
     # 1.1 Linearize the motion model and compute Jacobians
     F_jac = np.zeros((9, 9))
     F_jac[0:3, 0:3] = np.eye(3)
@@ -192,7 +191,7 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     F_jac[6:9, 3:6] = 0 * np.eye(3)
     F_jac[6:9, 6:9] = np.eye(3)
     # 2. Propagate uncertainty
-    p_cov_check = np.matmul(np.matmul(F_jac, p_cov[k-1]), F_jac.T) + np.matmul(np.matmul(l_jac, Qk_1), l_jac.T)
+    p_cov[k] = np.matmul(np.matmul(F_jac, p_cov[k-1]), F_jac.T) + np.matmul(np.matmul(l_jac, Qk_1), l_jac.T)
     # 3. Check availability of GNSS and LIDAR measurements
     tk = imu_f.t[k]
     tl = lidar.t[lidar_i]
@@ -243,6 +242,7 @@ ax.set_zticks([-2, -1, 0, 1, 2])
 ax.legend(loc=(0.62, 0.77))
 ax.view_init(elev=45, azim=-50)
 plt.show()
+plt.savefig('gt_vs_est.png')
 
 ################################################################################################
 # We can also plot the error for each of the 6 DOF, with estimates for our uncertainty
@@ -286,7 +286,7 @@ for i in range(3):
     ax[1, i].set_title(titles[i + 3])
 ax[1, 0].set_ylabel('Radians')
 plt.show()
-
+plt.savefig('errors.png')
 #### 7. Submission #############################################################################
 
 ################################################################################################
