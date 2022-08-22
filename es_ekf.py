@@ -98,8 +98,8 @@ lidar.data = (C_li @ lidar.data.T).T + t_i_li
 ################################################################################################
 var_imu_f = 0.10
 var_imu_w = 0.25
-var_gnss = 0.01
-var_lidar = 1.00
+var_gnss = 1.0
+var_lidar = 10.0
 R_GNSS = var_gnss * np.eye(3)
 R_LIDAR = var_lidar * np.eye(3)
 
